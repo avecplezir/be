@@ -96,7 +96,8 @@ class Ensemble_orderFC(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.fc = nn.Linear(in_features, out_features, bias=False)
-        self.alpha = nn.Parameter(torch.Tensor(num_models, in_features))
+        if not first_layer:
+            self.alpha = nn.Parameter(torch.Tensor(num_models, in_features))
         self.gamma = nn.Parameter(torch.Tensor(num_models, out_features))
         #self.alpha = torch.Tensor(num_models, in_features).cuda()
         #self.gamma = torch.Tensor(num_models, out_features).cuda()
@@ -169,9 +170,10 @@ class Ensemble_orderFC(nn.Module):
         extra = x.size(0) - (num_examples_per_model * self.num_models)
         # Repeated pattern: [[A,A],[B,B],[C,C]]
         if num_examples_per_model != 0:
-            alpha = torch.cat(
-                [self.alpha for i in range(num_examples_per_model)],
-                dim=1).view([-1, self.in_features])
+            if not self.first_layer:
+                alpha = torch.cat(
+                    [self.alpha for i in range(num_examples_per_model)],
+                    dim=1).view([-1, self.in_features])
             gamma = torch.cat(
                 [self.gamma for i in range(num_examples_per_model)],
                 dim=1).view([-1, self.out_features])
@@ -189,7 +191,7 @@ class Ensemble_orderFC(nn.Module):
             gamma = torch.cat([gamma, gamma[:extra]], dim=0)
             bias = torch.cat([bias, bias[:extra]], dim=0)
 
-        result = self.fc(x*alpha)*gamma
+        result = self.fc(x*alpha) #*gamma
         return result + bias if self.bias is not None else result
 
 
@@ -203,6 +205,7 @@ class Ensemble_Conv2d(nn.Module):
         self.conv = nn.Conv2d(
             in_channels, out_channels, kernel_size, stride=stride,
             padding=padding, groups=groups, bias=False)
+        self.first_layer = first_layer
         self.alpha = nn.Parameter(torch.Tensor(num_models, in_channels))
         self.train_gamma = train_gamma
         self.random_sign_init = random_sign_init
@@ -217,7 +220,7 @@ class Ensemble_Conv2d(nn.Module):
         else:
             self.register_parameter('bias', None)
         self.reset_parameters()
-        self.first_layer = first_layer
+        torch.nn.init.xavier_uniform_(self.conv.weight, gain=np.sqrt(2))
 
     def reset_parameters(self):
         if self.constant_init:
@@ -282,10 +285,11 @@ class Ensemble_Conv2d(nn.Module):
             extra = x.size(0) - (num_examples_per_model * self.num_models)
 
             # Repeated pattern: [[A,A],[B,B],[C,C]]
-            alpha = torch.cat(
-                [self.alpha for i in range(num_examples_per_model)],
-                dim=1).view([-1, self.in_channels])
-            alpha.unsqueeze_(-1).unsqueeze_(-1)
+            if not self.first_layer:
+                alpha = torch.cat(
+                    [self.alpha for i in range(num_examples_per_model)],
+                    dim=1).view([-1, self.in_channels])
+                alpha.unsqueeze_(-1).unsqueeze_(-1)
             gamma = torch.cat(
                 [self.gamma for i in range(num_examples_per_model)],
                 dim=1).view([-1, self.out_channels])
@@ -297,11 +301,16 @@ class Ensemble_Conv2d(nn.Module):
                 bias.unsqueeze_(-1).unsqueeze_(-1)
 
             if extra != 0:
-                alpha = torch.cat([alpha, alpha[:extra]], dim=0)
+                if not self.first_layer:
+                    alpha = torch.cat([alpha, alpha[:extra]], dim=0)
                 gamma = torch.cat([gamma, gamma[:extra]], dim=0)
                 if self.bias is not None:
                     bias = torch.cat([bias, bias[:extra]], dim=0)
-            result = self.conv(x*alpha)*gamma
+
+            if self.first_layer:
+                result = self.conv(x)
+            else:
+                result = self.conv(x * alpha)*gamma
 
             #import time
             #start_time = time.time()
@@ -323,17 +332,21 @@ class Ensemble_Conv2d(nn.Module):
         else:
             num_examples_per_model = int(x.size(0) / self.num_models)
             # Repeated pattern: [[A,A],[B,B],[C,C]]
-            alpha = torch.cat(
-                [self.alpha for i in range(num_examples_per_model)],
-                dim=1).view([-1, self.in_channels])
-            alpha.unsqueeze_(-1).unsqueeze_(-1)
+            if not self.first_layer:
+                alpha = torch.cat(
+                    [self.alpha for i in range(num_examples_per_model)],
+                    dim=1).view([-1, self.in_channels])
+                alpha.unsqueeze_(-1).unsqueeze_(-1)
 
             if self.bias is not None:
                 bias = torch.cat(
                     [self.bias for i in range(num_examples_per_model)],
                     dim=1).view([-1, self.out_channels])
                 bias.unsqueeze_(-1).unsqueeze_(-1)
-            result = self.conv(x*alpha)
+            if self.first_layer:
+                result = self.conv(x)
+            else:
+                result = self.conv(x * alpha)
             return result + bias if self.bias is not None else result
 
 

@@ -25,11 +25,15 @@ def conv_init(m):
         init.constant_(m.bias, 0)
 
 class wide_basic_ensemble(nn.Module):
-    def __init__(self, in_planes, planes, dropout_rate, stride=1,num_models=4):
+    def __init__(self, in_planes, planes, dropout_rate, stride=1,num_models=4, is_first=False):
         super(wide_basic_ensemble, self).__init__()
+        print('in_planes, plane', in_planes, planes)
         self.bn1 = nn.BatchNorm2d(in_planes)
         #self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, padding=1, bias=True)
-        self.conv1 = Ensemble_Conv2d(in_planes, planes, 3, stride=1, padding=1, first_layer=False, num_models=num_models, bias=True)
+        if is_first:
+            self.conv1 = nn.Conv2d(in_planes, planes, kernel_size=3, stride=1,  padding=1, bias=True)
+        else:
+            self.conv1 = Ensemble_Conv2d(in_planes, planes, 3, stride=1, padding=1, first_layer=False, num_models=num_models, bias=True)
         ##self.conv1 = Ensemble_Conv2dBatchNorm_pre(in_planes, planes, 3, stride=1, padding=1, first_layer=False, num_models=num_models, bias=True)
         self.dropout = nn.Dropout(p=dropout_rate)
         self.bn2 = nn.BatchNorm2d(planes)
@@ -90,19 +94,22 @@ class Wide_ResNet_BatchEnsemble(nn.Module):
         nStages = [16, 16*k, 32*k, 64*k]
 
         self.conv1 = conv3x3(3,nStages[0], stride=1,first_layer=True, num_models=num_models)
-        self.layer1 = self._wide_layer(wide_basic_ensemble, nStages[1], n, dropout_rate, stride=1,num_models=num_models)
+        self.layer1 = self._wide_layer(wide_basic_ensemble, nStages[1], n, dropout_rate, stride=1,num_models=num_models, is_first=False)
         self.layer2 = self._wide_layer(wide_basic_ensemble, nStages[2], n, dropout_rate, stride=2,num_models=num_models)
         self.layer3 = self._wide_layer(wide_basic_ensemble, nStages[3], n, dropout_rate, stride=2,num_models=num_models)
         self.bn1 = nn.BatchNorm2d(nStages[3], momentum=0.9)
         #self.linear = nn.Linear(nStages[3], num_classes)
         self.linear =Ensemble_orderFC(nStages[3], num_classes, num_models, False)
         self.num_classes = num_classes
-    def _wide_layer(self, block, planes, num_blocks, dropout_rate, stride,num_models):
+    def _wide_layer(self, block, planes, num_blocks, dropout_rate, stride,num_models, is_first=False):
         strides = [stride] + [1]*(int(num_blocks)-1)
         layers = []
 
-        for stride in strides:
-            layers.append(block(self.in_planes, planes, dropout_rate, stride,num_models))
+        for i, stride in enumerate(strides):
+            if i == 0:
+                layers.append(block(self.in_planes, planes, dropout_rate, stride,num_models, is_first=is_first))
+            else:
+                layers.append(block(self.in_planes, planes, dropout_rate, stride, num_models, is_first=False))
             self.in_planes = planes
 
         return nn.Sequential(*layers)

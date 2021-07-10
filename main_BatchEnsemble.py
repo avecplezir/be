@@ -29,20 +29,22 @@ parser.add_argument('--dataset', default='cifar10', type=str, help='dataset = [c
 parser.add_argument('--dirsave_out', default='batch_ensemble', type=str, help='where the checkpoint are save. ./checkpoint/dataset/dirsave_out')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--testOnly', '-t', action='store_true', help='Test mode with the saved model')
+parser.add_argument('--ensemble_size', default=4, type=int)
+parser.add_argument('--scale', action='store_true')
 args = parser.parse_args()
 #python main_BatchEnsemble.py  --depth 28
 
-ensemble_size=4
+ensemble_size=args.ensemble_size
 # Hyper Parameter settings
 use_cuda = torch.cuda.is_available()
 best_acc = 0
 start_epoch, num_epochs, batch_size, optim_type = cf.start_epoch, cf.num_epochs, cf.batch_size, cf.optim_type
-batch_size=128#128
+batch_size=128 #128#128
 # Data Uplaod
 cutout=16
 class CutoutDefault(object):
     """
-    Reference : https://github.com/quark0/darts/blob/master/cnn/utils.py
+    Reference : https://github.co m/quark0/darts/blob/master/cnn/utils.py
     """
     def __init__(self, length):
         self.length = length
@@ -153,7 +155,7 @@ if args.resume:
 else:
     print('| Building net type [wide-resnet BE]...')
     net, file_name = getNetwork(args)
-    #net.apply(conv_init)
+    # net.apply(conv_init)
 
 if use_cuda:
     net.cuda()
@@ -202,6 +204,8 @@ def train(epoch):
         inputs, targets = Variable(inputs), Variable(targets)
         outputs = net(inputs)               # Forward Propagation
         loss = criterion(outputs, targets)  # Loss
+        if args.scale:
+            loss = ensemble_size * loss
         loss.backward()  # Backward Propagation
         optimizer.step() # Optimizer update
 

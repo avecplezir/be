@@ -32,6 +32,7 @@ def conv_init(m):
         try:
             init.xavier_uniform_(m.conv.conv.weight, gain=np.sqrt(2))
         except:
+            print()
             init.xavier_uniform_(m.weight, gain=np.sqrt(2))
             #init.constant_(m.bias, 0)
     elif classname.find('BatchNorm') != -1:
